@@ -12,42 +12,40 @@ class EbookReaderApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Akshar',
+      color: Colors.white,
       themeMode: ThemeMode.dark,
       darkTheme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF1A1A1A),
-
+        scaffoldBackgroundColor: const Color(0xFF121212),
         colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF6C63FF),
-          secondary: Color(0xFFFF6584),
-          tertiary: Color(0xFF4CAF50),
-          surface: Color(0xFF242424),
+          primary: Color(0xFF7C8CFF), // brighter
+          secondary: Color(0xFFFF6B8B), // accent
+          surface: Color(0xFF1C1C1E),
+          background: Color(0xFF121212),
         ),
-
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF242424),
+          backgroundColor: Color(0xFF121212),
           elevation: 0,
           titleTextStyle: TextStyle(
-            color: Colors.white,
-            fontSize: 26,
-            fontWeight: FontWeight.bold,
+            color: Color(0xFFBFD1FF), // bright logo/title
+            fontSize: 28,
+            fontWeight: FontWeight.w800,
           ),
-          iconTheme: IconThemeData(color: Colors.white),
+          iconTheme: IconThemeData(color: Color(0xFFBFD1FF)),
         ),
-
         floatingActionButtonTheme: const FloatingActionButtonThemeData(
-          backgroundColor: Color(0xFFFF6584),
-          foregroundColor: Colors.white,
+          backgroundColor: Color(0xFF7C8CFF),
+          foregroundColor: Colors.black,
+          elevation: 3,
         ),
-
         snackBarTheme: const SnackBarThemeData(
-          backgroundColor: Color(0xFF333333),
+          backgroundColor: Color(0xFF1F2937),
           contentTextStyle: TextStyle(color: Colors.white),
         ),
+        useMaterial3: true,
       ),
-
-      home: const HomeScreen(),
       debugShowCheckedModeBanner: false,
+      home: const HomeScreen(),
     );
   }
 }
