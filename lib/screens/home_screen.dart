@@ -1,8 +1,17 @@
-import 'package:akshar_final/models/books.dart';
-import 'package:akshar_final/screens/reader_screen.dart';
-import 'package:akshar_final/services/book_services.dart';
-import 'package:akshar_final/widgets/book_card.dart' show BookCard;
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+
+import 'package:akshar_final/models/books.dart';
+import 'package:akshar_final/services/book_services.dart';
+import 'package:akshar_final/screens/reader_screen.dart';
+import 'package:akshar_final/widgets/book_card.dart';
+
+// HTML parsing (to strip EPUB XHTML tags into text)
+import 'package:html/parser.dart' as htmlparser;
+// Pure-Dart zip reader to parse EPUB contents on web
+import 'package:archive/archive.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,145 +23,144 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final BookService _bookService = BookService();
 
-  void _openFilePicker() async {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Select Book'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'In a production app, this would open a file picker.',
-                ),
-                const SizedBox(height: 16),
-                const Text('Supported formats: TXT, EPUB, PDF'),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _showAddBookDialog();
-                  },
-                  child: const Text('Simulate Adding Book'),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-            ],
-          ),
+  Future<void> _pickFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['txt', 'epub', 'pdf'],
+      allowMultiple: false,
+      withData: true, // web-friendly
+      withReadStream: true, // web-friendly (fallback)
     );
-  }
 
-  void _showAddBookDialog() {
-    final titleController = TextEditingController();
-    final authorController = TextEditingController();
-    final contentController = TextEditingController();
+    if (result == null) return;
+    final picked = result.files.single;
 
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Add Book'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: titleController,
-                    decoration: const InputDecoration(
-                      labelText: 'Title',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: authorController,
-                    decoration: const InputDecoration(
-                      labelText: 'Author',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: contentController,
-                    decoration: const InputDecoration(
-                      labelText: 'Content',
-                      border: OutlineInputBorder(),
-                    ),
-                    maxLines: 5,
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  if (titleController.text.isNotEmpty) {
-                    final book = Book(
-                      id: DateTime.now().millisecondsSinceEpoch.toString(),
-                      title: titleController.text,
-                      author:
-                          authorController.text.isEmpty
-                              ? 'Unknown Author'
-                              : authorController.text,
-                      filePath: '/simulated/path',
-                      content:
-                          contentController.text.isEmpty
-                              ? 'No content provided'
-                              : contentController.text,
-                    );
-                    _bookService.addBook(book);
-                    setState(() {});
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Book added successfully!')),
-                    );
-                  }
-                },
-                child: const Text('Add'),
-              ),
-            ],
-          ),
-    );
+    // Ensure we always get bytes, even if .bytes is null on web
+    Uint8List? bytes = picked.bytes;
+    if (bytes == null && picked.readStream != null) {
+      final bb = BytesBuilder();
+      await for (final chunk in picked.readStream!) {
+        bb.add(chunk);
+      }
+      bytes = bb.toBytes();
+    }
+
+    if (bytes == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not read file (no bytes)')),
+      );
+      return;
+    }
+
+    final ext = (picked.extension ?? '').toLowerCase();
+    String content = '';
+
+    try {
+      if (ext == 'txt') {
+        content = utf8.decode(bytes, allowMalformed: true);
+      } else if (ext == 'epub') {
+        // Parse EPUB (ZIP) on web: extract all .xhtml/.html files and strip tags
+        final archive = ZipDecoder().decodeBytes(bytes, verify: false);
+        final texts = <String>[];
+
+        for (final f in archive.files) {
+          if (!f.isFile) continue;
+          final name = f.name.toLowerCase();
+          if (name.endsWith('.xhtml') ||
+              name.endsWith('.html') ||
+              name.endsWith('.htm')) {
+            final data = f.content as List<int>;
+            final rawHtml = utf8.decode(data, allowMalformed: true);
+
+            // Replace common HTML breaks with line breaks, then strip tags
+            final normalized = rawHtml
+                .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+                .replaceAll(RegExp(r'</p>', caseSensitive: false), '\n\n');
+
+            final doc = htmlparser.parse(normalized);
+            final text = doc.body?.text ?? '';
+            final clean =
+                text
+                    .replaceAll('\u00A0', ' ')
+                    .replaceAll('&nbsp;', ' ')
+                    .replaceAll('&amp;', '&')
+                    .trim();
+
+            if (clean.isNotEmpty) texts.add(clean);
+          }
+        }
+
+        content = texts.join('\n\n').trim();
+        if (content.isEmpty) {
+          content = 'Unable to extract readable text from this EPUB.';
+        }
+      } else if (ext == 'pdf') {
+        // For web: store PDF bytes as base64; ReaderScreen will show iframe blob
+        content = base64Encode(bytes);
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Unsupported file type: .$ext')));
+        return;
+      }
+
+      final book = Book(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        title: picked.name,
+        author: 'Unknown Author',
+        filePath:
+            picked.name, // not used on web reader; content carries text/base64
+        content: content,
+      );
+
+      _bookService.addBook(book);
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Added ${book.title}')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Import failed: $e')));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final recentBooks = _bookService.getRecentBooks();
+    final books = _bookService.getRecentBooks();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: const Color(0xFFF6F7FB),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFF6C63FF),
+        backgroundColor: Colors.transparent,
+        scrolledUnderElevation: 0,
         title: const Text(
           'Akshar',
           style: TextStyle(
-            color: Colors.white,
+            color: Color(0xFF1F2937),
             fontSize: 28,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.2,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.5,
           ),
         ),
+        actions: const [SizedBox(width: 12)],
       ),
-      body:
-          recentBooks.isEmpty
-              ? _buildEmptyState()
-              : _buildBookList(recentBooks),
+      body: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        child: books.isEmpty ? _buildEmptyState() : _buildBeautifulGrid(books),
+      ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openFilePicker,
+        onPressed: _pickFile,
         icon: const Icon(Icons.add),
         label: const Text('Add Book'),
-        backgroundColor: const Color(0xFFFF6584),
+        backgroundColor: const Color(0xFF6C63FF),
+        foregroundColor: Colors.white,
+        elevation: 4,
       ),
     );
   }
@@ -163,79 +171,76 @@ class _HomeScreenState extends State<HomeScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(32),
+            padding: const EdgeInsets.all(36),
             decoration: BoxDecoration(
-              color: const Color(0xFF6C63FF).withOpacity(0.1),
+              color: const Color(0xFF6C63FF).withValues(alpha: 0.08),
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              Icons.library_books_outlined,
-              size: 80,
-              color: const Color(0xFF6C63FF),
+            child: const Icon(
+              Icons.menu_book_rounded,
+              size: 90,
+              color: Color(0xFF6C63FF),
             ),
           ),
           const SizedBox(height: 24),
           const Text(
-            'No books yet',
+            'Your library is empty',
             style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF2D3748),
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF111827),
             ),
           ),
           const SizedBox(height: 8),
           const Text(
-            'Tap the button below to add your first book',
-            style: TextStyle(fontSize: 16, color: Color(0xFF718096)),
+            'Add a TXT, EPUB, or PDF to get started.',
+            style: TextStyle(fontSize: 15, color: Color(0xFF6B7280)),
           ),
+          const SizedBox(height: 20),
         ],
       ),
     );
   }
 
-  Widget _buildBookList(List<Book> books) {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Recent Books',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF2D3748),
-            ),
+  Widget _buildBeautifulGrid(List<Book> books) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        int crossAxisCount = 2;
+        if (width > 520) crossAxisCount = 3;
+        if (width > 820) crossAxisCount = 4;
+        if (width > 1100) crossAxisCount = 5;
+
+        return GridView.builder(
+          itemCount: books.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            mainAxisExtent: 220,
+            crossAxisSpacing: 14,
+            mainAxisSpacing: 16,
           ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: ListView.builder(
-              itemCount: books.length,
-              itemBuilder: (context, index) {
-                return BookCard(
-                  book: books[index],
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ReaderScreen(book: books[index]),
-                      ),
-                    );
-                    setState(() {});
-                  },
-                  onDelete: () {
-                    _bookService.removeBook(books[index].id);
-                    setState(() {});
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Book removed')),
-                    );
-                  },
+          itemBuilder: (context, i) {
+            final book = books[i];
+            return BookCard(
+              book: book,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => ReaderScreen(book: book)),
                 );
               },
-            ),
-          ),
-        ],
-      ),
+              onDelete: () {
+                _bookService.removeBook(book.id);
+                if (!mounted) return;
+                setState(() {});
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('Book removed')));
+              },
+            );
+          },
+        );
+      },
     );
   }
 }
