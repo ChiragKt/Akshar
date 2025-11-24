@@ -12,17 +12,40 @@ class EbookReaderApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Akshar',
-      theme: ThemeData(
-        primaryColor: const Color(0xFF6C63FF),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6C63FF),
-          primary: const Color(0xFF6C63FF),
-          secondary: const Color(0xFFFF6584),
-          tertiary: const Color(0xFF4CAF50),
+      themeMode: ThemeMode.dark,
+      darkTheme: ThemeData(
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF1A1A1A),
+
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFF6C63FF),
+          secondary: Color(0xFFFF6584),
+          tertiary: Color(0xFF4CAF50),
+          surface: Color(0xFF242424),
         ),
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFF5F7FA),
+
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF242424),
+          elevation: 0,
+          titleTextStyle: TextStyle(
+            color: Colors.white,
+            fontSize: 26,
+            fontWeight: FontWeight.bold,
+          ),
+          iconTheme: IconThemeData(color: Colors.white),
+        ),
+
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+          backgroundColor: Color(0xFFFF6584),
+          foregroundColor: Colors.white,
+        ),
+
+        snackBarTheme: const SnackBarThemeData(
+          backgroundColor: Color(0xFF333333),
+          contentTextStyle: TextStyle(color: Colors.white),
+        ),
       ),
+
       home: const HomeScreen(),
       debugShowCheckedModeBanner: false,
     );

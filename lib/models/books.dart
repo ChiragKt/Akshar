@@ -4,8 +4,11 @@ class Book {
   final String author;
   final String filePath;
   final String content;
+
   DateTime lastRead;
   int currentPage;
+
+  double bookmarkOffset; // <-- ADDED
 
   Book({
     required this.id,
@@ -13,8 +16,9 @@ class Book {
     required this.author,
     required this.filePath,
     required this.content,
-    DateTime? lastRead,
     this.currentPage = 0,
+    this.bookmarkOffset = 0.0, // <-- DEFAULT
+    DateTime? lastRead,
   }) : lastRead = lastRead ?? DateTime.now();
 
   Map<String, dynamic> toJson() => {
@@ -23,8 +27,9 @@ class Book {
     'author': author,
     'filePath': filePath,
     'content': content,
-    'lastRead': lastRead.toIso8601String(),
     'currentPage': currentPage,
+    'bookmarkOffset': bookmarkOffset, // <-- SAVE
+    'lastRead': lastRead.toIso8601String(),
   };
 
   factory Book.fromJson(Map<String, dynamic> json) => Book(
@@ -33,7 +38,8 @@ class Book {
     author: json['author'],
     filePath: json['filePath'],
     content: json['content'],
-    lastRead: DateTime.parse(json['lastRead']),
     currentPage: json['currentPage'] ?? 0,
+    bookmarkOffset: (json['bookmarkOffset'] ?? 0).toDouble(), // <-- RESTORE
+    lastRead: DateTime.parse(json['lastRead']),
   );
 }

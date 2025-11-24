@@ -28,8 +28,8 @@ class _HomeScreenState extends State<HomeScreen> {
       type: FileType.custom,
       allowedExtensions: ['txt', 'epub', 'pdf'],
       allowMultiple: false,
-      withData: true, // web-friendly
-      withReadStream: true, // web-friendly (fallback)
+      withData: true,
+      withReadStream: true,
     );
 
     if (result == null) return;
@@ -73,7 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
             final data = f.content as List<int>;
             final rawHtml = utf8.decode(data, allowMalformed: true);
 
-            // Replace common HTML breaks with line breaks, then strip tags
+            // Normalize breaks then strip tags
             final normalized = rawHtml
                 .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
                 .replaceAll(RegExp(r'</p>', caseSensitive: false), '\n\n');
@@ -134,7 +134,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final books = _bookService.getRecentBooks();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
+      backgroundColor: const Color(0xFF1A1A1A),
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.transparent,

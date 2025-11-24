@@ -1,27 +1,24 @@
-import 'package:akshar_final/models/reading_settings.dart';
 import 'package:flutter/material.dart';
+import 'package:akshar_final/models/reading_settings.dart';
+
+enum ReaderFont { sans, serif, mono }
 
 class SettingsPanel extends StatelessWidget {
   final ReadingSettings settings;
-  final List<Color> backgroundColors;
-  final VoidCallback onSettingsChanged;
+  final VoidCallback onChanged;
 
   const SettingsPanel({
     super.key,
     required this.settings,
-    required this.backgroundColors,
-    required this.onSettingsChanged,
+    required this.onChanged,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        boxShadow: [
-          BoxShadow(color: Colors.black, blurRadius: 10, spreadRadius: 5),
-        ],
+      decoration: const BoxDecoration(
+        color: Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -31,70 +28,144 @@ class SettingsPanel extends StatelessWidget {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(2),
+              color: Colors.grey,
+              borderRadius: BorderRadius.circular(4),
             ),
           ),
           const SizedBox(height: 20),
+
+          // FONT SIZE
           Row(
             children: [
-              const Text('Font Size', style: TextStyle(fontSize: 16)),
+              const Text("Font Size", style: TextStyle(color: Colors.white)),
               Expanded(
                 child: Slider(
                   value: settings.fontSize,
-                  min: 12,
+                  min: 14,
                   max: 32,
-                  divisions: 10,
-                  label: settings.fontSize.round().toString(),
-                  onChanged: (value) {
-                    settings.fontSize = value;
-                    onSettingsChanged();
+                  onChanged: (v) {
+                    settings.fontSize = v;
+                    onChanged();
                   },
                 ),
               ),
-              Text(
-                '${settings.fontSize.round()}',
-                style: const TextStyle(fontWeight: FontWeight.bold),
+            ],
+          ),
+
+          const SizedBox(height: 20),
+
+          // LINE HEIGHT
+          Row(
+            children: [
+              const Text("Line Height", style: TextStyle(color: Colors.white)),
+              Expanded(
+                child: Slider(
+                  value: settings.lineHeight,
+                  min: 1.0,
+                  max: 2.5,
+                  onChanged: (v) {
+                    settings.lineHeight = v;
+                    onChanged();
+                  },
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          const Text('Background Color', style: TextStyle(fontSize: 16)),
-          const SizedBox(height: 12),
+
+          const SizedBox(height: 20),
+
+          // FONT FAMILY
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text("Font Style", style: TextStyle(color: Colors.white)),
+          ),
+          DropdownButton<ReaderFont>(
+            value: _mapEnum(settings.fontFamily),
+            dropdownColor: const Color(0xFF2A2A2A),
+            style: const TextStyle(color: Colors.white),
+            items: const [
+              DropdownMenuItem(
+                value: ReaderFont.sans,
+                child: Text("Sans Serif"),
+              ),
+              DropdownMenuItem(value: ReaderFont.serif, child: Text("Serif")),
+              DropdownMenuItem(
+                value: ReaderFont.mono,
+                child: Text("Monospace"),
+              ),
+            ],
+            onChanged: (val) {
+              settings.fontFamily = _mapString(val!);
+              onChanged();
+            },
+          ),
+
+          const SizedBox(height: 20),
+
+          // TEXT ALIGNMENT
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children:
-                backgroundColors.map((color) {
-                  return GestureDetector(
-                    onTap: () {
-                      settings.backgroundColor = color;
-                      settings.textColor =
-                          color == const Color(0xFF2C2C2C)
-                              ? Colors.white
-                              : const Color(0xFF212121);
-                      onSettingsChanged();
-                    },
-                    child: Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: color,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color:
-                              settings.backgroundColor == color
-                                  ? Colors.deepPurple
-                                  : Colors.grey[300]!,
-                          width: 3,
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
+            children: [
+              IconButton(
+                icon: const Icon(Icons.format_align_left, color: Colors.white),
+                onPressed: () {
+                  settings.textAlign = TextAlign.left;
+                  onChanged();
+                },
+              ),
+              IconButton(
+                icon: const Icon(
+                  Icons.format_align_center,
+                  color: Colors.white,
+                ),
+                onPressed: () {
+                  settings.textAlign = TextAlign.center;
+                  onChanged();
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.format_align_right, color: Colors.white),
+                onPressed: () {
+                  settings.textAlign = TextAlign.right;
+                  onChanged();
+                },
+              ),
+              IconButton(
+                icon: const Icon(
+                  Icons.format_align_justify,
+                  color: Colors.white,
+                ),
+                onPressed: () {
+                  settings.textAlign = TextAlign.justify;
+                  onChanged();
+                },
+              ),
+            ],
           ),
-          const SizedBox(height: 20),
         ],
       ),
     );
+  }
+
+  ReaderFont _mapEnum(String fam) {
+    switch (fam) {
+      case 'serif':
+        return ReaderFont.serif;
+      case 'mono':
+        return ReaderFont.mono;
+      default:
+        return ReaderFont.sans;
+    }
+  }
+
+  String _mapString(ReaderFont f) {
+    switch (f) {
+      case ReaderFont.serif:
+        return 'serif';
+      case ReaderFont.mono:
+        return 'mono';
+      default:
+        return 'sans';
+    }
   }
 }
