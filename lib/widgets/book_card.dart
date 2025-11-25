@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:akshar_final/models/books.dart';
 
@@ -16,123 +15,119 @@ class BookCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.all(16),
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: const Color(0xFF121212),
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.45),
-              blurRadius: 20,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        width: 260, // Nice Apple Books size
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ===============================
-            // COVER (NO OVERFLOW EVER)
-            // ===============================
-            AspectRatio(
-              aspectRatio: 3 / 4, // Book ratio
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(18),
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xff6c63ff), Color(0xff9770ff)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+    return Material(
+      elevation: 6,
+      borderRadius: BorderRadius.circular(20),
+      color: const Color(0xFF1A1A1A),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ---------- COVER ----------
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: SizedBox(
+                  width: 110,
+                  height: 160,
+                  child: _CoverBox(bytes: book.coverBytes),
+                ),
+              ),
+
+              const SizedBox(width: 18),
+
+              // ---------- TEXT ----------
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Title
+                    Text(
+                      book.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
                     ),
-                  ),
-                  child:
-                      book.coverBytes != null
-                          ? Image.memory(book.coverBytes!, fit: BoxFit.cover)
-                          : Center(
-                            child: Icon(
-                              Icons.menu_book_rounded,
-                              size: 88,
-                              color: Colors.white,
-                              shadows: [
-                                Shadow(
-                                  blurRadius: 24,
-                                  color: Colors.white.withOpacity(0.9),
-                                ),
-                                Shadow(
-                                  blurRadius: 48,
-                                  color: Colors.white.withOpacity(0.7),
-                                ),
-                              ],
-                            ),
-                          ),
+
+                    const SizedBox(height: 6),
+
+                    // Author
+                    Text(
+                      book.author,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.white.withOpacity(0.7),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Last Read
+                    Text(
+                      "Last read: Today",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.white.withOpacity(0.4),
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // ---------- DELETE BUTTON ----------
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.redAccent),
+                        iconSize: 28,
+                        onPressed: onDelete,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // ===============================
-            // TITLE
-            // ===============================
-            Text(
-              book.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-
-            const SizedBox(height: 6),
-
-            // ===============================
-            // AUTHOR
-            // ===============================
-            Text(
-              book.author,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.6),
-                fontSize: 15,
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            // ===============================
-            // FOOTER (LAST READ + DELETE)
-            // ===============================
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  "Last read: Today",
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.4),
-                    fontSize: 13,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(
-                    Icons.delete,
-                    color: Colors.redAccent,
-                    size: 22,
-                  ),
-                  onPressed: onDelete,
-                ),
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+// ---------- COVER WIDGET ----------
+class _CoverBox extends StatelessWidget {
+  final List<int>? bytes;
+
+  const _CoverBox({required this.bytes});
+
+  @override
+  Widget build(BuildContext context) {
+    if (bytes != null && bytes!.isNotEmpty) {
+      return Image.memory(
+        bytes as dynamic,
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+      );
+    }
+
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF6C63FF), Color(0xFF9A83FF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: const Center(
+        child: Icon(Icons.menu_book_rounded, size: 80, color: Colors.white),
       ),
     );
   }

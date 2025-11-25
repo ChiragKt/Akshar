@@ -6,7 +6,6 @@ import 'package:akshar_final/widgets/settings_panel.dart';
 
 class ReaderScreen extends StatefulWidget {
   final Book book;
-
   const ReaderScreen({super.key, required this.book});
 
   @override
@@ -14,109 +13,77 @@ class ReaderScreen extends StatefulWidget {
 }
 
 class _ReaderScreenState extends State<ReaderScreen> {
-  final ReadingSettings _settings = ReadingSettings();
+  final ReadingSettings _settings = ReadingSettings.shared;
   final BookService _bookService = BookService();
-  final ScrollController _scrollController = ScrollController();
+  final ScrollController _scroll = ScrollController();
 
   bool _showSettings = false;
-  bool _showSearch = false;
-
-  // SEARCH
-  final TextEditingController _searchCtrl = TextEditingController();
-  final List<int> _matches = [];
-  int _matchIndex = 0;
 
   @override
   void initState() {
     super.initState();
 
-    // Jump to saved bookmark
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients &&
+      if (_scroll.hasClients &&
           widget.book.bookmarkOffset > 0 &&
-          widget.book.bookmarkOffset <
-              _scrollController.position.maxScrollExtent) {
-        _scrollController.jumpTo(widget.book.bookmarkOffset);
+          widget.book.bookmarkOffset < _scroll.position.maxScrollExtent) {
+        _scroll.jumpTo(widget.book.bookmarkOffset);
       }
     });
 
-    // Save new scroll offset as bookmark
-    _scrollController.addListener(() {
-      if (_scrollController.hasClients) {
-        widget.book.bookmarkOffset = _scrollController.offset;
+    _scroll.addListener(() {
+      if (_scroll.hasClients) {
+        widget.book.bookmarkOffset = _scroll.offset;
       }
     });
 
-    // Update "last read" timestamp
     _bookService.updateLastRead(widget.book.id);
   }
 
   @override
   void dispose() {
-    _scrollController.dispose();
-    _searchCtrl.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
-  // ---------------- SEARCH ----------------
-  void _runSearch(String query) {
-    _matches.clear();
-    _matchIndex = 0;
-
-    if (query.trim().isEmpty) {
-      setState(() {});
-      return;
-    }
-
-    final lowerText = widget.book.content.toLowerCase();
-    final lowerQuery = query.toLowerCase();
-
-    int start = 0;
-    while (true) {
-      final idx = lowerText.indexOf(lowerQuery, start);
-      if (idx == -1) break;
-      _matches.add(idx);
-      start = idx + lowerQuery.length;
-    }
-
-    setState(() {});
-    if (_matches.isNotEmpty) {
-      _jumpToMatch(0);
-    }
-  }
-
-  void _jumpToMatch(int index) {
-    if (_matches.isEmpty) return;
-
-    _matchIndex = index.clamp(0, _matches.length - 1);
-    final charIndex = _matches[_matchIndex];
-
-    final ratio = charIndex / widget.book.content.length;
-    final target = ratio * _scrollController.position.maxScrollExtent;
-
-    _scrollController.animateTo(
-      target,
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
-    );
-
-    setState(() {});
-  }
-
-  // --------- PROGRESS ---------
   double get _progress {
-    if (!_scrollController.hasClients) return 0;
-    if (_scrollController.position.maxScrollExtent == 0) return 0;
-
-    return (_scrollController.offset /
-            _scrollController.position.maxScrollExtent)
-        .clamp(0.0, 1.0);
+    if (!_scroll.hasClients) return 0;
+    final max = _scroll.position.maxScrollExtent;
+    if (max == 0) return 0;
+    return (_scroll.offset / max).clamp(0.0, 1.0);
   }
 
-  void _saveBookmark() {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text("Bookmark saved")));
+  void _cycleTheme() {
+    final themes = ReadingSettings.themes;
+    final currentIndex = themes.indexWhere(
+      (c) => c.toARGB32() == _settings.backgroundColor.toARGB32(),
+    );
+    final next = themes[(currentIndex + 1) % themes.length];
+
+    setState(() {
+      _settings.backgroundColor = next;
+      _settings.textColor =
+          next.computeLuminance() < 0.5 ? Colors.white : Colors.black87;
+    });
+  }
+
+  void _toggleBookmark() {
+    setState(() {
+      if (_scroll.hasClients) {
+        widget.book.bookmarkOffset =
+            widget.book.bookmarkOffset > 0 ? 0 : _scroll.offset;
+      }
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          widget.book.bookmarkOffset > 0
+              ? "Bookmark saved"
+              : "Bookmark removed",
+        ),
+      ),
+    );
   }
 
   @override
@@ -125,38 +92,46 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
     return Scaffold(
       backgroundColor: _settings.backgroundColor,
-
       appBar: AppBar(
         backgroundColor: _settings.backgroundColor,
         elevation: 0,
         iconTheme: IconThemeData(color: _settings.textColor),
-
         title: Text(
           widget.book.title,
           style: TextStyle(color: _settings.textColor, fontSize: 18),
         ),
-
         actions: [
+          // 🔖 Bookmark (AppBar)
           IconButton(
-            icon: Icon(Icons.search, color: _settings.textColor),
-            onPressed: () => setState(() => _showSearch = !_showSearch),
+            tooltip: 'Save Bookmark',
+            icon: Icon(
+              widget.book.bookmarkOffset > 0
+                  ? Icons.bookmark
+                  : Icons.bookmark_border,
+              color: _settings.textColor,
+            ),
+            onPressed: _toggleBookmark,
           ),
+
+          // 🎨 Theme cycle
           IconButton(
-            icon: Icon(Icons.bookmark_add_outlined, color: _settings.textColor),
-            onPressed: _saveBookmark,
+            tooltip: 'Change background',
+            icon: Icon(Icons.palette_outlined, color: _settings.textColor),
+            onPressed: _cycleTheme,
           ),
+
+          // ⚙ Settings
           IconButton(
             icon: Icon(Icons.settings, color: _settings.textColor),
             onPressed: () => setState(() => _showSettings = !_showSettings),
           ),
         ],
-
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(6),
           child: LinearProgressIndicator(
             value: _progress,
             backgroundColor: isDark ? Colors.white12 : Colors.black12,
-            valueColor: AlwaysStoppedAnimation(Colors.deepPurpleAccent),
+            valueColor: const AlwaysStoppedAnimation(Colors.deepPurpleAccent),
             minHeight: 4,
           ),
         ),
@@ -164,20 +139,25 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
       body: Stack(
         children: [
-          // BOOK CONTENT
           SingleChildScrollView(
-            controller: _scrollController,
+            controller: _scroll,
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 140),
             child: DefaultTextStyle(
               style: TextStyle(
                 fontSize: _settings.fontSize,
                 color: _settings.textColor,
                 height: _settings.lineHeight,
-                fontFamily: _settings.fontFamily,
+                fontFamily:
+                    _settings.fontFamily == 'serif'
+                        ? 'Times New Roman'
+                        : _settings.fontFamily == 'mono'
+                        ? 'monospace'
+                        : null,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Title
                   Text(
                     widget.book.title,
                     textAlign: _settings.textAlign,
@@ -188,16 +168,20 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     ),
                   ),
                   const SizedBox(height: 6),
+
+                  // Author
                   Text(
                     "by ${widget.book.author}",
                     textAlign: _settings.textAlign,
                     style: TextStyle(
                       fontSize: _settings.fontSize - 2,
                       fontStyle: FontStyle.italic,
-                      color: _settings.textColor.withOpacity(0.6),
+                      color: _settings.textColor.withValues(alpha: 0.7),
                     ),
                   ),
                   const SizedBox(height: 20),
+
+                  // Body
                   Text(
                     widget.book.content.isEmpty
                         ? "No content available."
@@ -209,69 +193,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
             ),
           ),
 
-          // SEARCH BAR
-          if (_showSearch)
-            Positioned(
-              top: 12,
-              left: 12,
-              right: 12,
-              child: Material(
-                elevation: 12,
-                borderRadius: BorderRadius.circular(12),
-                color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.search),
-                      const SizedBox(width: 6),
-
-                      Expanded(
-                        child: TextField(
-                          controller: _searchCtrl,
-                          onChanged: _runSearch,
-                          decoration: const InputDecoration(
-                            hintText: "Search in book...",
-                            border: InputBorder.none,
-                          ),
-                        ),
-                      ),
-
-                      if (_matches.isNotEmpty) ...[
-                        Text(
-                          "${_matchIndex + 1}/${_matches.length}",
-                          style: TextStyle(color: _settings.textColor),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.arrow_drop_up),
-                          onPressed: () => _jumpToMatch(_matchIndex - 1),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.arrow_drop_down),
-                          onPressed: () => _jumpToMatch(_matchIndex + 1),
-                        ),
-                      ],
-
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () {
-                          setState(() {
-                            _showSearch = false;
-                            _searchCtrl.clear();
-                            _matches.clear();
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-          // SETTINGS PANEL
           if (_showSettings)
             Positioned(
               left: 0,

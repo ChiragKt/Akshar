@@ -1,16 +1,17 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:akshar_final/screens/reader_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 
 import 'package:akshar_final/models/books.dart';
 import 'package:akshar_final/services/book_services.dart';
-import 'package:akshar_final/screens/reader_screen.dart';
+import 'package:akshar_final/screens/bookmarks_screen.dart';
 import 'package:akshar_final/widgets/book_card.dart';
 
-// HTML parsing to strip EPUB text content (XHTML)
+// HTML parser for EPUB
 import 'package:html/parser.dart' as htmlparser;
-// Pure-Dart ZIP for Web
+// ZIP decode for EPUB
 import 'package:archive/archive.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -23,6 +24,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final BookService _bookService = BookService();
 
+  // ---------------- PICK FILE ----------------
   Future<void> _pickFile() async {
     final result = await FilePicker.platform.pickFiles(
       allowMultiple: false,
@@ -33,10 +35,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (result == null) return;
-    final picked = result.files.single;
 
+    final picked = result.files.single;
     Uint8List? bytes = picked.bytes;
-    // On web, sometimes bytes are only available via readStream.
+
     if (bytes == null && picked.readStream != null) {
       final bb = BytesBuilder();
       await for (final chunk in picked.readStream!) {
@@ -47,98 +49,110 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (bytes == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not read file (no bytes).')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Unable to read file.")));
       return;
     }
 
-    final ext = (picked.extension ?? '').toLowerCase();
-    String content = '';
+    final ext = picked.extension?.toLowerCase() ?? "";
+    String content = "";
     Uint8List? coverBytes;
 
     try {
-      if (ext == 'txt') {
+      // ------------ TXT ------------
+      if (ext == "txt") {
         content = utf8.decode(bytes, allowMalformed: true);
-      } else if (ext == 'epub') {
-        // Parse EPUB: extract cover + plain text
+      }
+      // ------------ EPUB ------------
+      else if (ext == "epub") {
         final archive = ZipDecoder().decodeBytes(bytes, verify: false);
-        final texts = <String>[];
+        final List<String> texts = [];
 
-        // Try to find a cover image first (common names)
-        final imageFiles = <ArchiveFile>[];
+        // Find images (possible cover)
+        final List<ArchiveFile> imageFiles = [];
         for (final f in archive.files) {
-          if (!f.isFile) continue;
-          final name = f.name.toLowerCase();
-          if (name.endsWith('.png') ||
-              name.endsWith('.jpg') ||
-              name.endsWith('.jpeg') ||
-              name.endsWith('.webp')) {
-            imageFiles.add(f);
+          if (f.isFile) {
+            final name = f.name.toLowerCase();
+            if (name.endsWith(".png") ||
+                name.endsWith(".jpg") ||
+                name.endsWith(".jpeg") ||
+                name.endsWith(".webp")) {
+              imageFiles.add(f);
+            }
           }
         }
-        // Heuristic: prefer any file that contains 'cover' in its path/name
+
+        // Prefer file containing "cover"
         imageFiles.sort((a, b) {
-          final aHas = a.name.toLowerCase().contains('cover') ? 0 : 1;
-          final bHas = b.name.toLowerCase().contains('cover') ? 0 : 1;
-          return aHas.compareTo(bHas);
+          final aScore = a.name.toLowerCase().contains("cover") ? 0 : 1;
+          final bScore = b.name.toLowerCase().contains("cover") ? 0 : 1;
+          return aScore.compareTo(bScore);
         });
+
         if (imageFiles.isNotEmpty) {
-          final img = imageFiles.first.content as List<int>;
-          coverBytes = Uint8List.fromList(img);
+          coverBytes = Uint8List.fromList(
+            imageFiles.first.content as List<int>,
+          );
         }
 
-        // Extract readable text from xhtml/html
+        // Extract text
         for (final f in archive.files) {
           if (!f.isFile) continue;
+
           final name = f.name.toLowerCase();
-          if (name.endsWith('.xhtml') ||
-              name.endsWith('.html') ||
-              name.endsWith('.htm')) {
+          if (name.endsWith(".xhtml") ||
+              name.endsWith(".html") ||
+              name.endsWith(".htm")) {
             final raw = utf8.decode(
               f.content as List<int>,
               allowMalformed: true,
             );
 
             final normalized = raw
-                .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
-                .replaceAll(RegExp(r'</p>', caseSensitive: false), '\n\n');
+                .replaceAll(RegExp(r"<br\s*/?>"), "\n")
+                .replaceAll("</p>", "\n\n");
 
             final doc = htmlparser.parse(normalized);
-            final text = doc.body?.text ?? '';
-            final clean = text.replaceAll('\u00A0', ' ').trim();
+            final text = doc.body?.text ?? "";
+            final clean = text.replaceAll("\u00A0", " ").trim();
+
             if (clean.isNotEmpty) texts.add(clean);
           }
         }
 
-        content = texts.join('\n\n').trim();
+        content = texts.join("\n\n").trim();
         if (content.isEmpty) {
-          content = 'This EPUB did not include easily extractable text.';
+          content = "No text could be extracted from this EPUB.";
         }
-      } else if (ext == 'pdf') {
-        // We don't parse PDF text on the web here; just store a placeholder.
-        // (Reader will show “No content available.”)
-        content = '';
-      } else {
+      }
+      // ------------ PDF ------------
+      else if (ext == "pdf") {
+        content = ""; // Placeholder for now
+      }
+      // ------------ Unsupported ------------
+      else {
         if (!mounted) return;
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Unsupported type: .$ext')));
+        ).showSnackBar(SnackBar(content: Text("Unsupported type: $ext")));
         return;
       }
 
+      // CREATE BOOK
       final book = Book(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         title: picked.name,
-        author: 'Unknown Author',
+        author: "Unknown Author",
         filePath: picked.name,
         content: content,
         coverBytes: coverBytes,
       );
 
       _bookService.addBook(book);
-      if (!mounted) return;
       setState(() {});
+
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Added "${book.title}"')));
@@ -146,10 +160,11 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Import failed: $e')));
+      ).showSnackBar(SnackBar(content: Text("Error: $e")));
     }
   }
 
+  // ---------------- UI ----------------
   @override
   Widget build(BuildContext context) {
     final books = _bookService.getRecentBooks();
@@ -164,39 +179,48 @@ class _HomeScreenState extends State<HomeScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _pickFile,
         icon: const Icon(Icons.add),
-        label: const Text('Add Book'),
-        backgroundColor: const Color(0xFF7C8CFF), // brighter accent
+        label: const Text("Add Book"),
+        backgroundColor: const Color(0xFF7C8CFF),
         foregroundColor: Colors.black,
-        elevation: 3,
       ),
     );
   }
 
+  // ---------------- HEADER ----------------
   PreferredSizeWidget _buildHeader() {
     return AppBar(
-      elevation: 0,
       backgroundColor: const Color(0xFF121212),
+      elevation: 0,
       centerTitle: true,
       title: const Text(
-        'Akshar',
+        "Akshar",
         style: TextStyle(
-          color: Color(0xFFBFD1FF), // brighter logo text
+          color: Color(0xFFBFD1FF),
           fontSize: 30,
           fontWeight: FontWeight.w800,
-          letterSpacing: 0.5,
         ),
       ),
       actions: [
         IconButton(
-          tooltip: 'Add Book',
+          tooltip: "Bookmarks",
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const BookmarksScreen()),
+            );
+          },
+          icon: const Icon(Icons.bookmark, color: Color(0xFFBFD1FF)),
+        ),
+        IconButton(
+          tooltip: "Add Book",
           onPressed: _pickFile,
           icon: const Icon(Icons.add_box_rounded, color: Color(0xFFBFD1FF)),
         ),
-        const SizedBox(width: 6),
       ],
     );
   }
 
+  // ---------------- EMPTY STATE ----------------
   Widget _empty() {
     return Center(
       child: Column(
@@ -205,7 +229,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Container(
             padding: const EdgeInsets.all(36),
             decoration: BoxDecoration(
-              color: const Color(0xFF7C8CFF).withValues(alpha: 0.12),
+              color: const Color(0xFF7C8CFF).withOpacity(0.12),
               shape: BoxShape.circle,
             ),
             child: const Icon(
@@ -216,7 +240,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 16),
           const Text(
-            'Your shelf is empty',
+            "Your shelf is empty",
             style: TextStyle(
               color: Colors.white,
               fontSize: 20,
@@ -225,14 +249,15 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Tap “Add Book” to import a TXT, EPUB, or PDF.',
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.65)),
+            "Tap “Add Book” to import a TXT, EPUB, or PDF.",
+            style: TextStyle(color: Colors.white.withOpacity(0.65)),
           ),
         ],
       ),
     );
   }
 
+  // ---------------- GRID ----------------
   Widget _adaptiveGrid(List<Book> books) {
     return LayoutBuilder(
       builder: (context, c) {
@@ -247,8 +272,8 @@ class _HomeScreenState extends State<HomeScreen> {
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: cols,
             crossAxisSpacing: 16,
-            mainAxisSpacing: 18,
-            mainAxisExtent: 230,
+            mainAxisSpacing: 16,
+            mainAxisExtent: 250,
           ),
           itemBuilder: (_, i) {
             final b = books[i];
@@ -265,7 +290,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 setState(() {});
                 ScaffoldMessenger.of(
                   context,
-                ).showSnackBar(const SnackBar(content: Text('Book removed')));
+                ).showSnackBar(const SnackBar(content: Text("Book removed")));
               },
             );
           },
